@@ -1,9 +1,12 @@
 package com.example.camerapractice;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.lifecycle.LifecycleOwner;
 import androidx.lifecycle.LifecycleRegistry;
 
+import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.Picture;
@@ -11,6 +14,7 @@ import android.hardware.Camera;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
@@ -22,6 +26,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.Timer;
+import java.util.TimerTask;
 
 import static android.content.ContentValues.TAG;
 import static android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE;
@@ -31,9 +37,8 @@ public class MainActivity extends AppCompatActivity {
     public Camera mCamera;
     public CameraPreview mPreview;
 
+    FrameLayout frameLayout;
 
-    public static final int MEDIA_TYPE_IMAGE = 1;
-    public static final int MEDIA_TYPE_VIDEO = 2;
 
 
     @Override
@@ -42,86 +47,84 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         Button button = findViewById(R.id.button_capture);
+        frameLayout = findViewById(R.id.camera_preview);
+
+        permission();
+
+        new Timer().scheduleAtFixedRate(new TimerTask() {
+            @Override
+            public void run() {
+                //captureimage();
+            }
+        }, 0, 1000);
+
+        mCamera = Camera.open();
+        mPreview = new CameraPreview(this, mCamera);
+        frameLayout.addView(mPreview);
 
         button.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                mCamera.takePicture(null, null, mpicture);
+
+             captureimage(v);
+
             }
         });
 
-        mCamera = getCameraInstance();
-
-        mPreview = new CameraPreview(this, mCamera);
-        FrameLayout preview = findViewById(R.id.camera_preview);
-        preview.addView(mPreview);
-
-
     }
 
-    public static Camera getCameraInstance() {
-        android.hardware.Camera c = null;
-        try {
-            c = android.hardware.Camera.open(); // attempt to get a Camera instance
-        } catch (Exception e) {
 
-        }
-        return c;
-    }
-
-    private Camera.PictureCallback mpicture = new Camera.PictureCallback() {
+    Camera.PictureCallback mpicturecallback = new Camera.PictureCallback() {
         @Override
         public void onPictureTaken(byte[] data, Camera camera) {
-            File pictureFile = getOutputMediaFile(MEDIA_TYPE_IMAGE);
-            if (pictureFile == null) {
-                Log.d(TAG, "Error creating media file, check storage permissions");
+            File picturefile = getoutputmediafile();
+            if (picturefile == null) {
                 return;
-            }
-            try {
-                FileOutputStream fos = new FileOutputStream(pictureFile);
-                fos.write(data);
-                fos.close();
-            } catch (FileNotFoundException e) {
-                Log.d(TAG, "File not found: " + e.getMessage());
-            } catch (IOException e) {
-                Log.d(TAG, "Error accessing file: " + e.getMessage());
-            }
+            } else {
+                try {
+                    FileOutputStream fos = new FileOutputStream(picturefile);
+                    fos.write(data);
+                    fos.close();
 
+                    mCamera.startPreview();
+                } catch (FileNotFoundException e) {
+                    e.printStackTrace();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+
+        private File getoutputmediafile() {
+            String state = Environment.getExternalStorageState();
+            if (!state.equals(Environment.MEDIA_MOUNTED)) {
+                return null;
+
+            } else {
+                File folder_uri = new File(Environment.getExternalStorageDirectory() + File.separator + "GUI");
+                if (!folder_uri.exists()) {
+                    folder_uri.mkdirs();
+                }
+                File outputfile = new File(folder_uri, "temp.jpge");
+                return outputfile;
+            }
         }
     };
 
-    private static Uri getOutputMediaFileUri(int type) {
-        return Uri.fromFile(getOutputMediaFile(type));
+    public void captureimage(View v) {
+        if (mCamera != null) {
+            mCamera.takePicture(null, null, mpicturecallback);
+        }
+
     }
 
-
-    private static File getOutputMediaFile(int type) {
-
-
-        File mediaStorageDir = new File(Environment.getExternalStoragePublicDirectory(
-                Environment.DIRECTORY_PICTURES), "MyCameraApp");
-
-        if (!mediaStorageDir.exists()) {
-            if (!mediaStorageDir.mkdirs()) {
-                Log.d("MyCameraApp", "failed to create directory");
-                return null;
-            }
-
-        }
-        // Create a media file name
-        String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
-        File mediaFile;
-        if (type == MEDIA_TYPE_IMAGE) {
-            mediaFile = new File(mediaStorageDir.getPath() + File.separator +
-                    "IMG_" + timeStamp + ".jpg");
-        } else if (type == MEDIA_TYPE_VIDEO) {
-            mediaFile = new File(mediaStorageDir.getPath() + File.separator +
-                    "VID_" + timeStamp + ".mp4");
-        } else {
-            return null;
+    public void permission() {
+        if (ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.CAMERA)
+                != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(MainActivity.this,
+                    new String[]{Manifest.permission.CAMERA}, 101);
         }
 
-        return mediaFile;
     }
 }
 
